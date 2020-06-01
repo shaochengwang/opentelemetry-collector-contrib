@@ -16,26 +16,26 @@ package awsemfexporter
 
 import "go.opentelemetry.io/collector/config/configmodels"
 
-// Config defines configuration for AWS X-Ray exporter.
+// Config defines configuration for AWS EMF exporter.
 type Config struct {
 	configmodels.ExporterSettings `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
 	// LogGroupName
 	LogGroupName string `mapstructure:"log_group_name"`
 	// LogStreamName
 	LogStreamName string `mapstructure:"log_stream_name"`
-	// X-Ray service endpoint to which the collector sends segment documents.
+	// CWLogs service endpoint
 	Endpoint string `mapstructure:"endpoint"`
 	// Number of seconds before timing out a request.
 	RequestTimeoutSeconds int `mapstructure:"request_timeout_seconds"`
-	// Upload segments to AWS X-Ray through a proxy.
+	// Upload logs to AWS CWLogs through a proxy.
 	ProxyAddress string `mapstructure:"proxy_address"`
-	// Send segments to AWS X-Ray service in a specific region.
+	// Send metric logs to AWS CWLogs service in a specific region.
 	Region string `mapstructure:"region"`
 	// Local mode to skip EC2 instance metadata check.
 	LocalMode bool `mapstructure:"local_mode"`
 	// Amazon Resource Name (ARN) of the AWS resource running the collector.
 	ResourceARN string `mapstructure:"resource_arn"`
-	// IAM role to upload segments to a different account.
+	// IAM role to upload emf logs to a different account.
 	RoleARN string `mapstructure:"role_arn"`
 	// Enable or disable TLS certificate verification.
 	NoVerifySSL bool `mapstructure:"no_verify_ssl"`
