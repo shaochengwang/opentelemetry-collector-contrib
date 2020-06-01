@@ -119,13 +119,23 @@ func (cwl *cwlClient) pushMetricsData(
 
 	}
 
+	expConfig := cwl.config.(*Config)
+	logGroup := "otel-lg"
+	logStream := "otel-stream"
+	// override log group if found it in exp configuraiton
+	if len(expConfig.LogGroupName) > 0 {
+		logGroup = expConfig.LogGroupName
+	}
+	if len(expConfig.LogStreamName) > 0 {
+		logStream = expConfig.LogStreamName
+	}
 	// hardcode log group and log stream for now
-	token, _ := cwl.CreateStream(aws.String("otel-lg"), aws.String("otel-stream"))
+	token, _ := cwl.CreateStream(aws.String(logGroup), aws.String(logStream))
 
 	response, err := cwl.client.PutLogEvents(&cloudwatchlogs.PutLogEventsInput{
 		LogEvents:     ples,
-		LogGroupName:  aws.String("otel-lg"),
-		LogStreamName: aws.String("otel-stream"),
+		LogGroupName:  aws.String(logGroup),
+		LogStreamName: aws.String(logStream),
 		// SequenceToken: aws.String(token),
 	})
 	if err != nil {
@@ -137,8 +147,8 @@ func (cwl *cwlClient) pushMetricsData(
 			// cwl.logger.Info("ErrCodeInvalidSequenceTokenException==", zap.String("#token", token))
 			cwl.client.PutLogEvents(&cloudwatchlogs.PutLogEventsInput{
 				LogEvents:     ples,
-				LogGroupName:  aws.String("otel-lg"),
-				LogStreamName: aws.String("otel-stream"),
+				LogGroupName:  aws.String(logGroup),
+				LogStreamName: aws.String(logStream),
 				SequenceToken: aws.String(token),
 			})
 			if err != nil {

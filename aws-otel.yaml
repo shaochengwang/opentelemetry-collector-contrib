@@ -17,7 +17,7 @@
      logging:
       loglevel: debug
      awsemf:
-      log_group_name: 'app-test' 
+      log_group_name: 'otel-lg' 
       local_mode: true
       region: 'us-west-2'
       
