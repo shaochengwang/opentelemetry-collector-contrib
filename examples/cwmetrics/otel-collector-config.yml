@@ -1,0 +1,28 @@
+receivers:
+  otlp:
+    endpoint: 0.0.0.0:55680
+
+exporters:
+  logging:
+    loglevel: debug
+  awspmd:
+    local_mode: true
+    region: 'us-west-2'
+
+processors:
+  batch:
+  queued_retry:
+
+extensions:
+  health_check:
+  pprof:
+    endpoint: :1888
+  zpages:
+    endpoint: :55679
+
+service:
+  extensions: [pprof, zpages, health_check]
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      exporters: [logging, awspmd]

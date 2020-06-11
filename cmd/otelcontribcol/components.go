@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/service/defaultcomponents"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awspmdexporter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsxrayexporter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/azuremonitorexporter"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/carbonexporter"
@@ -98,6 +99,7 @@ func components() (config.Factories, error) {
 		&sapmexporter.Factory{},
 		&kinesisexporter.Factory{},
 		&awsxrayexporter.Factory{},
+		&awspmdexporter.Factory{},
 		&carbonexporter.Factory{},
 		&honeycombexporter.Factory{},
 		&jaegerthrifthttpexporter.Factory{},
