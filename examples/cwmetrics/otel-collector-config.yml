@@ -8,6 +8,7 @@ exporters:
   awspmd:
     local_mode: true
     region: 'us-west-2'
+    flush_interval: 30
 
 processors:
   batch:

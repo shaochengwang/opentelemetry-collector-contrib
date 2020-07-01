@@ -2,10 +2,10 @@ package util
 
 import (
 	"io/ioutil"
-"log"
-"os"
-"path/filepath"
-"strings"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 const cwagentVersionFileName = "CWAGENT_VERSION"

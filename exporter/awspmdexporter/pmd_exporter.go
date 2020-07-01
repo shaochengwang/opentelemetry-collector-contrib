@@ -29,7 +29,7 @@ func New(
 	if err != nil {
 		return nil, err
 	}
-	client := NewCloudWatchClient(logger, awsConfig, session)
+	client := NewCloudWatchClient(logger, awsConfig, session, config.(*Config))
 	client.config = config
 
 	return &pmdExporter{

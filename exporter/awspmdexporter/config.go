@@ -14,18 +14,22 @@
 
 package awspmdexporter
 
-import "go.opentelemetry.io/collector/config/configmodels"
+import (
+	"go.opentelemetry.io/collector/config/configmodels"
+)
 
 // Config defines configuration for AWS X-Ray exporter.
 type Config struct {
 	configmodels.ExporterSettings `mapstructure:",squash"` // squash ensures fields are correctly decoded in embedded struct.
+	// time to publish the metricDatums, unit is second
+	FlushInterval int `mapstructure:"flush_interval"`
 	// CloudWatch FrontEnd endpoint to which the collector sends MetricData.
 	Endpoint string `mapstructure:"endpoint"`
 	// Number of seconds before timing out a request.
 	RequestTimeoutSeconds int `mapstructure:"request_timeout_seconds"`
 	// Upload segments to AWS X-Ray through a proxy.
 	ProxyAddress string `mapstructure:"proxy_address"`
-	// Send segments to AWS X-Ray service in a specific region.
+	// Send Metrics to AWS CloudWatch service in a specific region.
 	Region string `mapstructure:"region"`
 	// Local mode to skip EC2 instance metadata check.
 	LocalMode bool `mapstructure:"local_mode"`
