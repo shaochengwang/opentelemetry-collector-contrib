@@ -64,13 +64,6 @@ func New(
 			fmt.Errorf("failed to process %q config: %v", config.Name(), err)
 	}
 
-	logger.Info("SignalFx Config", zap.String("ingest_url", options.ingestURL.String()))
-
-	if config.Name() == "" {
-		config.SetType(typeStr)
-		config.SetName(typeStr)
-	}
-
 	headers, err := buildHeaders(config)
 	if err != nil {
 		return nil, err
@@ -88,6 +81,7 @@ func New(
 		zippers: sync.Pool{New: func() interface{} {
 			return gzip.NewWriter(nil)
 		}},
+		accessTokenPassthrough: config.AccessTokenPassthrough,
 	}
 
 	dimClient := dimensions.NewDimensionClient(

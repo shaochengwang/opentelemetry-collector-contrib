@@ -1,4 +1,4 @@
-// Copyright 2019 Omnition Authors
+// Copyright 2020 OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,12 +15,13 @@
 package k8sprocessor
 
 import (
+	"context"
+
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/config/configerror"
 	"go.opentelemetry.io/collector/config/configmodels"
 	"go.opentelemetry.io/collector/consumer"
-	"go.uber.org/zap"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/k8sconfig"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/k8sprocessor/kube"
 )
 
@@ -47,20 +48,39 @@ func (f *Factory) CreateDefaultConfig() configmodels.Processor {
 			TypeVal: configmodels.Type(typeStr),
 			NameVal: typeStr,
 		},
+		APIConfig: k8sconfig.APIConfig{AuthType: k8sconfig.AuthTypeServiceAccount},
 	}
 }
 
 // CreateTraceProcessor creates a trace processor based on this config.
 func (f *Factory) CreateTraceProcessor(
-	logger *zap.Logger,
-	nextConsumer consumer.TraceConsumerOld,
+	ctx context.Context,
+	params component.ProcessorCreateParams,
+	nextTraceConsumer consumer.TraceConsumer,
 	cfg configmodels.Processor,
-) (component.TraceProcessorOld, error) {
+) (component.TraceProcessor, error) {
+	opts := createProcessorOpts(cfg)
+	return NewTraceProcessor(params.Logger, nextTraceConsumer, f.KubeClient, opts...)
+}
+
+// CreateMetricsProcessor creates a metrics processor based on this config.
+func (f *Factory) CreateMetricsProcessor(
+	ctx context.Context,
+	params component.ProcessorCreateParams,
+	nextMetricsConsumer consumer.MetricsConsumer,
+	cfg configmodels.Processor,
+) (component.MetricsProcessor, error) {
+	opts := createProcessorOpts(cfg)
+	return NewMetricsProcessor(params.Logger, nextMetricsConsumer, f.KubeClient, opts...)
+}
+
+func createProcessorOpts(cfg configmodels.Processor) []Option {
 	oCfg := cfg.(*Config)
 	opts := []Option{}
 	if oCfg.Passthrough {
 		opts = append(opts, WithPassthrough())
 	}
+
 	// extraction rules
 	opts = append(opts, WithExtractMetadata(oCfg.Extract.Metadata...))
 	opts = append(opts, WithExtractLabels(oCfg.Extract.Labels...))
@@ -71,14 +91,7 @@ func (f *Factory) CreateTraceProcessor(
 	opts = append(opts, WithFilterNamespace(oCfg.Filter.Namespace))
 	opts = append(opts, WithFilterLabels(oCfg.Filter.Labels...))
 	opts = append(opts, WithFilterFields(oCfg.Filter.Fields...))
-	return NewTraceProcessor(logger, nextConsumer, f.KubeClient, opts...)
-}
+	opts = append(opts, WithAPIConfig(oCfg.APIConfig))
 
-// CreateMetricsProcessor creates a metrics processor based on this config.
-func (f *Factory) CreateMetricsProcessor(
-	logger *zap.Logger,
-	nextConsumer consumer.MetricsConsumerOld,
-	cfg configmodels.Processor,
-) (component.MetricsProcessorOld, error) {
-	return nil, configerror.ErrDataTypeIsNotSupported
+	return opts
 }

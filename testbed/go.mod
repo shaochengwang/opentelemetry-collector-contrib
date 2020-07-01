@@ -6,10 +6,11 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/carbonexporter v0.0.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sapmexporter v0.0.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter v0.0.0
+	github.com/open-telemetry/opentelemetry-collector-contrib/internal/common v0.4.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/carbonreceiver v0.0.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/sapmreceiver v0.0.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/receiver/signalfxreceiver v0.0.0
-	go.opentelemetry.io/collector v0.3.1-0.20200601172059-a776048b653c
+	go.opentelemetry.io/collector v0.4.1-0.20200629224201-e7a7690e21fc
 	go.uber.org/zap v1.14.1
 )
 

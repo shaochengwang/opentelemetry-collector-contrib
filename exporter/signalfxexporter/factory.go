@@ -21,13 +21,14 @@ import (
 	"go.opentelemetry.io/collector/config/configerror"
 	"go.opentelemetry.io/collector/config/configmodels"
 	"go.uber.org/zap"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/splunk"
 )
 
 const (
 	// The value of "type" key in configuration.
 	typeStr = "signalfx"
 
-	defaultSFxRealm    = "us0"
 	defaultHTTPTimeout = time.Second * 5
 )
 
@@ -47,8 +48,10 @@ func (f *Factory) CreateDefaultConfig() configmodels.Exporter {
 			TypeVal: configmodels.Type(typeStr),
 			NameVal: typeStr,
 		},
-		Realm:   defaultSFxRealm,
 		Timeout: defaultHTTPTimeout,
+		AccessTokenPassthroughConfig: splunk.AccessTokenPassthroughConfig{
+			AccessTokenPassthrough: true,
+		},
 	}
 }
 

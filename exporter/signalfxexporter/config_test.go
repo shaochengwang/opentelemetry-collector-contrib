@@ -25,6 +25,8 @@ import (
 	"go.opentelemetry.io/collector/config"
 	"go.opentelemetry.io/collector/config/configmodels"
 	"go.uber.org/zap"
+
+	"github.com/open-telemetry/opentelemetry-collector-contrib/internal/common/splunk"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -60,6 +62,9 @@ func TestLoadConfig(t *testing.T) {
 			"dot.test":    "test",
 		},
 		Timeout: 2 * time.Second,
+		AccessTokenPassthroughConfig: splunk.AccessTokenPassthroughConfig{
+			AccessTokenPassthrough: false,
+		},
 	}
 	assert.Equal(t, &expectedCfg, e1)
 
@@ -129,6 +134,37 @@ func TestConfig_getOptionsFromConfig(t *testing.T) {
 				token:       "access_token",
 			},
 			wantErr: false,
+		},
+		{
+			name: "Test empty realm and API URL",
+			fields: fields{
+				AccessToken: "access_token",
+				Timeout:     10 * time.Second,
+				IngestURL:   "https://ingest.us1.signalfx.com/",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "Test empty realm and Ingest URL",
+			fields: fields{
+				AccessToken: "access_token",
+				Timeout:     10 * time.Second,
+				APIURL:      "https://api.us1.signalfx.com/",
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "Test invalid URLs",
+			fields: fields{
+				AccessToken: "access_token",
+				Timeout:     10 * time.Second,
+				APIURL:      "https://api us1 signalfx com/",
+				IngestURL:   "https://api us1 signalfx com/",
+			},
+			want:    nil,
+			wantErr: true,
 		},
 		{
 			name:    "Test empty config",
