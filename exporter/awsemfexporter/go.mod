@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/aws/aws-sdk-go v1.33.4
+	github.com/docker/docker v1.13.1
 	github.com/golang/protobuf v1.3.5
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/stretchr/testify v1.5.1

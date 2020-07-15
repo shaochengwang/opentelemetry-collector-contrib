@@ -2,6 +2,7 @@ package mapWithExpiry
 
 import (
 	"github.com/docker/docker/pkg/testutil/assert"
+	"sync"
 	"testing"
 	"time"
 )
@@ -34,4 +35,31 @@ func TestMapWithExpiry_cleanup(t *testing.T) {
 	assert.Equal(t, false, ok)
 	assert.Equal(t, nil, val)
 	assert.Equal(t, 0, store.Size())
+}
+
+func TestMapWithExpiry_concurrency(t *testing.T) {
+	store := NewMapWithExpiry(time.Second)
+	key := "key"
+	store.Set(key, 0)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		for add := 0; add < 100; add++ {
+			v, _ := store.Get(key)
+			store.Set(key, v.(int) + 1)
+		}
+		wg.Done()
+	}()
+
+	go func() {
+		for minus := 0; minus < 100; minus++ {
+			v, _ := store.Get(key)
+			store.Set(key, v.(int) - 1)
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+	v, _ := store.Get(key)
+	assert.Equal(t, 0, v.(int))
 }
