@@ -1,0 +1,32 @@
+extensions:
+  health_check:
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+
+processors:
+  batch:
+  queued_retry:
+
+exporters:
+  logging:
+    loglevel: debug
+  awsemf:
+    local_mode: true
+    region: 'us-west-2'
+    force_flush_interval: 30
+
+service:
+  pipelines:
+
+    metrics:
+      receivers: [otlp]
+      exporters: [logging, awsemf]
+
+  extensions: [health_check, pprof, zpages]
