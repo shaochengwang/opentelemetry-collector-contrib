@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter/translator"
 	"go.opentelemetry.io/collector/consumer/pdatautil"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 
@@ -28,10 +29,11 @@ type emfExporter struct {
 	groupStreamToPusherMap map[string]map[string]Pusher
 	svcStructuredLog LogClient
 	config configmodels.Exporter
+	logger *zap.Logger
 
 	pusherMapLock sync.Mutex
 	pusherWG         sync.WaitGroup
-	ForceFlushInterval time.Duration // unit is second
+	ForceFlushInterval time.Duration
 	shutdownChan chan bool
 	retryCnt int
 
@@ -61,10 +63,10 @@ func New(
 		config: config,
 		ForceFlushInterval: defaultForceFlushInterval,
 		retryCnt: *awsConfig.MaxRetries,
+		logger: logger,
 	}
 	if config.(*Config).ForceFlushInterval > 0 {
 		emfExporter.ForceFlushInterval = time.Duration(config.(*Config).ForceFlushInterval) * time.Second
-		fmt.Printf("D! Override ForceFlushInterval to %d nanoseconds, %d seconds\n", emfExporter.ForceFlushInterval, config.(*Config).ForceFlushInterval)
 	}
 	emfExporter.groupStreamToPusherMap = map[string]map[string]Pusher{}
 	emfExporter.shutdownChan = make(chan bool)
@@ -74,9 +76,14 @@ func New(
 
 func (emf *emfExporter) pushMetricsData(_ context.Context, md pdata.Metrics) (droppedTimeSeries int, err error) {
 	expConfig := emf.config.(*Config)
-	logGroup := "otel-lg"
+	logGroup := "/metrics/default"
 	logStream := "otel-stream"
-	// override log group if found it in exp configuraiton
+	// override log group if customer has specified Resource Attributes service.name or service.namespace
+	putLogEvents, namespace := generateLogEventFromMetric(md)
+	if namespace != "" {
+		logGroup = fmt.Sprintf("/metrics/%s", namespace)
+	}
+	// override log group if found it in exp configuration, this configuration has top priority. However, in this case, customer won't have correlation experience
 	if len(expConfig.LogGroupName) > 0 {
 		logGroup = expConfig.LogGroupName
 	}
@@ -85,7 +92,6 @@ func (emf *emfExporter) pushMetricsData(_ context.Context, md pdata.Metrics) (dr
 	}
 	pusher := emf.getPusher(logGroup, logStream, nil, NonBlocking)
 	if pusher != nil {
-		putLogEvents := generateLogEventFromMetric(md)
 		for _, ple := range putLogEvents {
 			pusher.AddLogEntry(ple)
 		}
@@ -111,7 +117,7 @@ func (emf *emfExporter) getPusher(logGroup, logStream string, stateFolder *strin
 			emf.ForceFlushInterval, emf.retryCnt, emf.svcStructuredLog, emf.shutdownChan, &emf.pusherWG, mode)
 		streamToPusherMap[logStream] = pusher
 	} else if pusher.GetMode() != mode {
-		fmt.Printf("E! LogStream conflict between metric_collected and logs_collected, for logGroup %s, logStream %s and mode %s \n", logGroup, logStream, mode)
+		emf.logger.Error(fmt.Sprintf("E! LogStream conflict between metric_collected and logs_collected, for logGroup %s, logStream %s and mode %s \n", logGroup, logStream, mode))
 		return nil
 	}
 
@@ -136,10 +142,11 @@ func (emf *emfExporter) Start(ctx context.Context, host component.Host) error {
 }
 
 
-func generateLogEventFromMetric(metric pdata.Metrics) []*LogEvent {
+func generateLogEventFromMetric(metric pdata.Metrics) ([]*LogEvent, string) {
 	imd := pdatautil.MetricsToInternalMetrics(metric)
 	rms := imd.ResourceMetrics()
 	cwMetricLists := []*translator.CWMetrics{}
+	var namespace string
 	for i := 0; i < rms.Len(); i++ {
 		rm := rms.At(i)
 		if rm.IsNil() {
@@ -148,13 +155,12 @@ func generateLogEventFromMetric(metric pdata.Metrics) []*LogEvent {
 		// translate OT metric datapoints into CWMetricLists
 		cwm, err := translator.TranslateOtToCWMetric(&rm)
 		if err != nil || cwm == nil {
-			return nil
+			return nil, ""
 		}
-		//fmt.Printf("I! the translated cwm is %v \n", cwm)
+		namespace = cwm[0].Measurements[0].Namespace
 		// append all datapoint metrics in the request into CWMetric list
 		for _, v := range cwm {
 			cwMetricLists = append(cwMetricLists, v)
-			//fmt.Printf("I! cloudwatch metric: %v \n", v)
 		}
 	}
 
@@ -169,9 +175,8 @@ func generateLogEventFromMetric(metric pdata.Metrics) []*LogEvent {
 
 		pleMsg, err := json.Marshal(fieldMap)
 		if err != nil {
-			fmt.Println(err)
+			continue
 		}
-		fmt.Println(string(pleMsg))
 		metricCreationTime := met.Timestamp
 
 		logEvent := NewLogEvent(
@@ -185,5 +190,5 @@ func generateLogEventFromMetric(metric pdata.Metrics) []*LogEvent {
 		logEvent.LogGeneratedTime = time.Unix(0, metricCreationTime * int64(time.Millisecond))
 		ples = append(ples, logEvent)
 	}
-	return ples
+	return ples, namespace
 }

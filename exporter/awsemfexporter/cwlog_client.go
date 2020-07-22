@@ -5,27 +5,18 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs/cloudwatchlogsiface"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter/handler"
-	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
-	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter/translator"
 	"go.opentelemetry.io/collector/config/configmodels"
 	"go.uber.org/zap"
 )
 
 const (
 	// See: http://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutLogEvents.html
-	perEventBytes          = 26
-	maximumBytesPerPut     = 1048576
 	maximumLogEventsPerPut = 10000
-	maximumTimeSpanPerPut  = time.Hour * 24
-	// Log stream objects that are empty and inactive for longer than the timeout get cleaned up
-	logStreamInactivityTimeout = time.Hour
-	// Check for expired log streams every 10 minutes
-	logStreamInactivityCheckInterval = 10 * time.Minute
 	// this is the retry count, the total attempts would be retry count + 1 at most.
 	defaultRetryCount = 5
 	ErrCodeThrottlingException = "ThrottlingException"
@@ -51,7 +42,6 @@ type CloudWatchLogClient struct {
 	logger *zap.Logger
 	emfLogData
 	config     configmodels.Exporter
-	translator *translator.EmfTranslator
 }
 
 type logStream struct {
@@ -79,7 +69,7 @@ func newCloudWatchLogClient(svc cloudwatchlogsiface.CloudWatchLogsAPI, logger *z
 	return logClient
 }
 
-// NewCloudWatchLogsClient create cwlog
+// NewCloudWatchLogsClient create CloudWatchLogClient
 func NewCloudWatchLogsClient(logger *zap.Logger, awsConfig *aws.Config, sess *session.Session) LogClient {
 	client := cloudwatchlogs.New(sess, awsConfig)
 	client.Handlers.Build.PushBackNamed(handler.RequestStructuredLogHandler)
@@ -99,50 +89,50 @@ func (client *CloudWatchLogClient) PutLogEvents(input *cloudwatchlogs.PutLogEven
 		if err != nil {
 			awsErr, ok := err.(awserr.Error)
 			if !ok {
-				log.Printf("E! Cannot cast PutLogEvents error %#v into awserr.Error.", err)
+				client.logger.Error(fmt.Sprintf("E! Cannot cast PutLogEvents error %#v into awserr.Error.", err))
 				return token
 			}
 			switch e := awsErr.(type) {
 			case *cloudwatchlogs.InvalidParameterException:
-				log.Printf("E! cloudwatchlogs: %s for log group %s log stream %s, will not retry the request: %s, original error: %#v, %#v",
+				client.logger.Error(fmt.Sprintf("E! cloudwatchlogs: %s for log group %s log stream %s, will not retry the request: %s, original error: %#v, %#v",
 					e.Code(),
 					*input.LogGroupName,
 					*input.LogStreamName,
 					e.Message(),
 					e.Error(),
-					e)
+					e))
 				return token
 			case *cloudwatchlogs.InvalidSequenceTokenException: //Resend log events with new sequence token when InvalidSequenceTokenException happens
-				log.Printf("W! cloudwatchlogs: %s, will search the next token and retry the request: %s, original error: %#v, %#v",
+				client.logger.Warn(fmt.Sprintf("W! cloudwatchlogs: %s, will search the next token and retry the request: %s, original error: %#v, %#v",
 					e.Code(),
 					e.Message(),
 					e.Error(),
-					e)
+					e))
 				backoffSleep(i)
 				token = e.ExpectedSequenceToken
 				continue
 			case *cloudwatchlogs.DataAlreadyAcceptedException: //Skip batch if DataAlreadyAcceptedException happens
-				log.Printf("W! cloudwatchlogs: %s, drop this request and continue to the next request: %s, original error: %#v, %#v",
+				client.logger.Warn(fmt.Sprintf("W! cloudwatchlogs: %s, drop this request and continue to the next request: %s, original error: %#v, %#v",
 					e.Code(),
 					e.Message(),
 					e.Error(),
-					e)
+					e))
 				token = e.ExpectedSequenceToken
 				return token
 			case *cloudwatchlogs.OperationAbortedException: //Retry request if OperationAbortedException happens
-				log.Printf("W! cloudwatchlogs: %s, will retry the request: %s, original error: %#v, %#v",
+				client.logger.Warn(fmt.Sprintf("W! cloudwatchlogs: %s, will retry the request: %s, original error: %#v, %#v",
 					e.Code(),
 					e.Message(),
 					e.Error(),
-					e)
+					e))
 				backoffSleep(i)
 				continue
 			case *cloudwatchlogs.ServiceUnavailableException: //Retry request if ServiceUnavailableException happens
-				log.Printf("W! cloudwatchlogs: %s, will retry the request: %s, original error: %#v, %#v",
+				client.logger.Warn(fmt.Sprintf("W! cloudwatchlogs: %s, will retry the request: %s, original error: %#v, %#v",
 					e.Code(),
 					e.Message(),
 					e.Error(),
-					e)
+					e))
 				backoffSleep(i)
 				continue
 			case *cloudwatchlogs.ResourceNotFoundException:
@@ -160,17 +150,17 @@ func (client *CloudWatchLogClient) PutLogEvents(input *cloudwatchlogs.PutLogEven
 				// ThrottlingException is handled here because the type cloudwatch.ThrottlingException is not yet available in public SDK
 				// Retry request if ThrottlingException happens
 				if awsErr.Code() == ErrCodeThrottlingException {
-					log.Printf("W! cloudwatchlogs: %s for log group %s log stream %s, will retry the request: %s, original error: %#v, %#v",
+					client.logger.Warn(fmt.Sprintf("W! cloudwatchlogs: %s for log group %s log stream %s, will retry the request: %s, original error: %#v, %#v",
 						awsErr.Code(),
 						*input.LogGroupName,
 						*input.LogStreamName,
 						awsErr.Message(),
 						awsErr.Error(),
-						awsErr)
+						awsErr))
 					backoffSleep(i)
 					continue
 				}
-				log.Printf("E! cloudwatchlogs: code: %s, message: %s, original error: %#v, %#v", awsErr.Code(), awsErr.Message(), awsErr.OrigErr(), err)
+				client.logger.Error(fmt.Sprintf("E! cloudwatchlogs: code: %s, message: %s, original error: %#v, %#v", awsErr.Code(), awsErr.Message(), awsErr.OrigErr(), err))
 				backoffSleep(i)
 				continue
 			}
@@ -181,13 +171,13 @@ func (client *CloudWatchLogClient) PutLogEvents(input *cloudwatchlogs.PutLogEven
 			if response.RejectedLogEventsInfo != nil {
 				rejectedLogEventsInfo := response.RejectedLogEventsInfo
 				if rejectedLogEventsInfo.TooOldLogEventEndIndex != nil {
-					log.Printf("W! %d log events for log group name '%s' are too old", *rejectedLogEventsInfo.TooOldLogEventEndIndex, *input.LogGroupName)
+					client.logger.Warn(fmt.Sprintf("W! %d log events for log group name '%s' are too old", *rejectedLogEventsInfo.TooOldLogEventEndIndex, *input.LogGroupName))
 				}
 				if rejectedLogEventsInfo.TooNewLogEventStartIndex != nil {
-					log.Printf("W! %d log events for log group name '%s' are too new", *rejectedLogEventsInfo.TooNewLogEventStartIndex, *input.LogGroupName)
+					client.logger.Warn(fmt.Sprintf("W! %d log events for log group name '%s' are too new", *rejectedLogEventsInfo.TooNewLogEventStartIndex, *input.LogGroupName))
 				}
 				if rejectedLogEventsInfo.ExpiredLogEventEndIndex != nil {
-					log.Printf("W! %d log events for log group name '%s' are expired", *rejectedLogEventsInfo.ExpiredLogEventEndIndex, *input.LogGroupName)
+					client.logger.Warn(fmt.Sprintf("W! %d log events for log group name '%s' are expired", *rejectedLogEventsInfo.ExpiredLogEventEndIndex, *input.LogGroupName))
 				}
 			}
 
@@ -198,7 +188,7 @@ func (client *CloudWatchLogClient) PutLogEvents(input *cloudwatchlogs.PutLogEven
 		}
 	}
 	if err != nil {
-		log.Printf("E! All retries failed for PutLogEvents. Drop this request.")
+		client.logger.Error(fmt.Sprintf("E! All retries failed for PutLogEvents. Drop this request."))
 	}
 	return token
 }
@@ -213,7 +203,7 @@ func (client *CloudWatchLogClient) CreateStream(logGroup, streamName *string) (t
 				LogStreamName: streamName,
 			})
 			if err != nil {
-				log.Printf("D! creating stream fail due to : %v \n", err)
+				client.logger.Debug(fmt.Sprintf("D! creating stream fail due to : %v \n", err))
 				if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == cloudwatchlogs.ErrCodeResourceNotFoundException {
 					_, err = client.svc.CreateLogGroup(&cloudwatchlogs.CreateLogGroupInput{
 						LogGroupName: logGroup,
@@ -227,7 +217,7 @@ func (client *CloudWatchLogClient) CreateStream(logGroup, streamName *string) (t
 		fmt.Sprintf("E! CreateLogStream / CreateLogGroup with log group name %s stream name %s has errors.", *logGroup, *streamName))
 
 	if e != nil {
-		log.Printf("D! error != nil, return token: %s with error: %v \n", token, e)
+		client.logger.Debug(fmt.Sprintf("D! error != nil, return token: %s with error: %v \n", token, e))
 		return token, e
 	}
 
@@ -245,7 +235,6 @@ func callFuncWithRetries(fn func() (string, error), ignoreException string, erro
 		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == ignoreException {
 			return result, nil
 		}
-		log.Printf("%s Will retry the request: %s", errorMsg, err.Error())
 		backoffSleep(i)
 	}
 	return
@@ -259,6 +248,5 @@ func backoffSleep(i int) {
 		backoffDuration = sleeps[i]
 	}
 
-	log.Printf("W! It is the %v time, going to sleep %v before retrying.", i, backoffDuration)
 	time.Sleep(backoffDuration)
 }

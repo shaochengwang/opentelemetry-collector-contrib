@@ -25,6 +25,8 @@ type Config struct {
 	LogGroupName string `mapstructure:"log_group_name"`
 	// LogStreamName
 	LogStreamName string `mapstructure:"log_stream_name"`
+	// CloudWatch metrics namespace
+	Namespace string `mapstructure:"namespace"`
 	// CWLogs service endpoint
 	Endpoint string `mapstructure:"endpoint"`
 	// Number of seconds before timing out a request.
