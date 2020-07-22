@@ -2,18 +2,13 @@ package awsemfexporter
 
 import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter/publisher"
-	"io/ioutil"
-"log"
-"path/filepath"
-"sort"
-"strconv"
-	"strings"
+	"log"
+	"sort"
 	"sync"
-"time"
+	"time"
 
-
-"github.com/aws/aws-sdk-go/aws"
-"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
 )
 
 const (
@@ -31,9 +26,6 @@ const (
 	logEventBatchPushChanBufferSize = 2 // processing part does not need to be blocked by the current put log event request
 	TruncatedSuffix                 = "[Truncated...]"
 
-	stateFileMode = 0644
-	Blocking      = "Blocking"
-	NonBlocking   = "NonBlocking"
 	Structured    = "Structured"
 )
 
@@ -142,7 +134,6 @@ func (inputLogEvents ByTimestamp) Less(i, j int) bool {
 //Pusher is one per log group
 type Pusher interface {
 	AddLogEntry(logEvent *LogEvent)
-	GetMode() string
 }
 
 //Struct of pusher implemented Pusher interface.
@@ -169,18 +160,16 @@ type pusher struct {
 	publisher      *publisher.Publisher
 	wg             *sync.WaitGroup
 	retryCnt       int
-	// mode of the pusher, valid values are "Blocking" or "NonBlocking"
-	mode string
 }
 
 //Create a pusher instance and start the instance afterwards
 func NewPusher(logGroupName, logStreamName, fileStateFolder *string,
 	forceFlushInterval time.Duration, retryCnt int,
-	svcStructuredLog LogClient, shutdownChan <-chan bool, wg *sync.WaitGroup, mode string) Pusher {
+	svcStructuredLog LogClient, shutdownChan <-chan bool, wg *sync.WaitGroup) Pusher {
 
 	pusher := newPusher(logGroupName, logStreamName, fileStateFolder,
 		forceFlushInterval,
-		svcStructuredLog, shutdownChan, wg, mode)
+		svcStructuredLog, shutdownChan, wg)
 
 	// For blocking queue, assuming the log batch payload size is 1MB. Set queue size to 2
 	// For nonblocking queue, assuming the log batch payload size is much less than 1MB. Set queue size to 20
@@ -201,7 +190,7 @@ func NewPusher(logGroupName, logStreamName, fileStateFolder *string,
 //Only create a pusher, but not start the instance.
 func newPusher(logGroupName, logStreamName, fileStateFolder *string,
 	forceFlushInterval time.Duration,
-	svcStructuredLog LogClient, shutdownChan <-chan bool, wg *sync.WaitGroup, mode string) *pusher {
+	svcStructuredLog LogClient, shutdownChan <-chan bool, wg *sync.WaitGroup) *pusher {
 	pusher := &pusher{
 		logGroupName:       logGroupName,
 		logStreamName:      logStreamName,
@@ -213,7 +202,6 @@ func newPusher(logGroupName, logStreamName, fileStateFolder *string,
 		shutdownChan:       shutdownChan,
 		wg:                 wg,
 		pushTicker:         time.NewTicker(forceFlushInterval),
-		mode:               mode,
 	}
 
 	pusher.logEventBatch = pusher.newLogEventBatch()
@@ -236,10 +224,6 @@ func (p *pusher) AddLogEntry(logEvent *LogEvent) {
 	if logEvent != nil {
 		p.logEventChan <- logEvent
 	}
-}
-
-func (p *pusher) GetMode() string {
-	return p.mode
 }
 
 //This method processes the log entries if any available in the channel.
@@ -281,7 +265,6 @@ func (p *pusher) push() {
 	for {
 		select {
 		case logEventBatch := <-p.pushChan:
-			log.Printf("D! ********************** Trigger put log event batch publication.")
 			p.publisher.Publish(logEventBatch)
 		case <-p.shutdownChan:
 			log.Printf("D! logpusher: push routine receives the shutdown signal, exiting.")
@@ -319,11 +302,9 @@ func (p *pusher) pushLogEventBatch(req interface{}) {
 		len(putLogEventsInput.LogEvents),
 		float64(logEventBatch.byteTotal)/float64(1024),
 		time.Now().Sub(startTime).Nanoseconds()/1e6)
-	//p.addStats("rawSize", float64(logEventBatch.byteTotal))
 
 	if tmpToken != nil {
 		p.streamToken = *tmpToken
-		p.recordState(logEventBatch.FileName, logEventBatch.FilePosition)
 	}
 	diff := time.Now().Sub(startTime)
 	if timeLeft := minPusherIntervalInMillis*time.Millisecond - diff; timeLeft > 0 {
@@ -375,9 +356,7 @@ func (p *pusher) addLogEvent(logEvent *LogEvent) {
 
 	p.newLogEventBatchIfNeeded(logEvent)
 	logEventBatch := p.logEventBatch
-	if logEventBatch.logType != Structured {
-		logEventBatch.logType = logEvent.logType
-	}
+
 	logEventBatch.PutLogEventsInput.LogEvents = append(logEventBatch.PutLogEventsInput.LogEvents, logEvent.InputLogEvent)
 	logEventBatch.byteTotal += logEvent.eventPayloadBytes()
 	logEventBatch.FileName = logEvent.FileName
@@ -388,37 +367,4 @@ func (p *pusher) addLogEvent(logEvent *LogEvent) {
 	if logEventBatch.maxTimestampInMillis == 0 || logEventBatch.maxTimestampInMillis < *logEvent.InputLogEvent.Timestamp {
 		logEventBatch.maxTimestampInMillis = *logEvent.InputLogEvent.Timestamp
 	}
-}
-
-//Store the latest input file offset for the log event batch just published.
-func (p *pusher) recordState(filename string, offset int64) {
-	if filename == "" || offset == 0 || p.fileStateFolder == nil {
-		return
-	}
-
-	escapedFileName := escapeFilePath(filename)
-
-	//consider to use json if the content increases further
-	err := ioutil.WriteFile(
-		*p.fileStateFolder+
-			string(filepath.Separator)+
-			escapedFileName,
-		[]byte(strconv.FormatInt(offset, 10)+"\n"+filename),
-		stateFileMode)
-	if err != nil {
-		log.Printf("E! Error happened when saving file state %s to file state folder %s: %s", filename, *p.fileStateFolder, err.Error())
-	}
-}
-//
-//func (p *pusher) addStats(statsName string, value float64) {
-//	statsKey := []string{"logpusher", *p.logGroupName, statsName}
-//	profiler.Profiler.AddStats(statsKey, value)
-//}
-
-func escapeFilePath(filePath string) (escapedFilePath string) {
-	escapedFilePath = filepath.ToSlash(filePath)
-	escapedFilePath = strings.Replace(escapedFilePath, "/", "_", -1)
-	escapedFilePath = strings.Replace(escapedFilePath, " ", "_", -1)
-	escapedFilePath = strings.Replace(escapedFilePath, ":", "_", -1)
-	return
 }

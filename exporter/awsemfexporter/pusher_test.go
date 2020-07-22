@@ -93,7 +93,7 @@ func NewMockPusher() (*pusher, string, chan<- bool) {
 	svc := NewAlwaysPassMockLogClient()
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	p := newPusher(&logGroup, &logStreamName, &tmpfolder, time.Second, svc, shutdownChan, &wg, Blocking)
+	p := newPusher(&logGroup, &logStreamName, &tmpfolder, time.Second, svc, shutdownChan, &wg)
 	p.publisher, _ = publisher.NewPublisher(publisher.NewNonBlockingFifoQueue(1), 1, 2*time.Second, p.pushLogEventBatch)
 	return p, tmpfolder, shutdownChan
 }

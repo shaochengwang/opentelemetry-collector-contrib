@@ -22,8 +22,9 @@ const (
 	ServiceNameAndNamespace
 	ServiceNotDefined
 
-	OtlibDimensionKey = "OT lib"
+	OtlibDimensionKey = "OTLib"
 	defaultNameSpace = "default"
+	noInstrumentationLibraryName = "Undefined"
 )
 
 var currentState = mapWithExpiry.NewMapWithExpiry(CleanInterval)
@@ -86,7 +87,6 @@ func TranslateOtToCWMetric(rm *pdata.ResourceMetrics) ([]*CWMetrics, error) {
 		case ServiceNotDefined:
 		default:
 		}
-		fmt.Printf("^^^^^^^^^^^The namespace is defined as %s \n", namespace)
 	}
 	ilms := rm.InstrumentationLibraryMetrics()
 	for j := 0; j < ilms.Len(); j++ {
@@ -95,7 +95,8 @@ func TranslateOtToCWMetric(rm *pdata.ResourceMetrics) ([]*CWMetrics, error) {
 			continue
 		}
 		if ilm.InstrumentationLibrary().IsNil() {
-			continue
+			ilm.InstrumentationLibrary().InitEmpty()
+			ilm.InstrumentationLibrary().SetName(noInstrumentationLibraryName)
 		}
 		OTLib := ilm.InstrumentationLibrary().Name()
 		metrics := ilm.Metrics()
@@ -113,7 +114,6 @@ func TranslateOtToCWMetric(rm *pdata.ResourceMetrics) ([]*CWMetrics, error) {
 			}
 		}
 	}
-
 	return cwMetricLists, nil
 }
 
@@ -122,7 +122,6 @@ func getMeasurements(metric *pdata.Metric, namespace string, OTLib string) ([]*C
 	if metric.Int64DataPoints().Len() == 0 && metric.DoubleDataPoints().Len() == 0 && metric.SummaryDataPoints().Len() == 0 {
 		return nil, nil
 	}
-
 	mDesc := metric.MetricDescriptor()
 	if mDesc.IsNil() {
 		return nil, nil
@@ -131,10 +130,9 @@ func getMeasurements(metric *pdata.Metric, namespace string, OTLib string) ([]*C
 	var result []*CWMetrics
 	// metric measure data from OT
 	metricMeasure := make(map[string]string)
-	// meture measure slice could include multiple metric measures
+	// metric measure slice could include multiple metric measures
 	metricSlice := []map[string]string{}
 	metricMeasure["Name"] = mDesc.Name()
-	//TODO: Need to add unit conversion from OT to CW
 	metricMeasure["Unit"] = mDesc.Unit()
 	metricSlice = append(metricSlice, metricMeasure)
 
@@ -164,9 +162,6 @@ func getMeasurements(metric *pdata.Metric, namespace string, OTLib string) ([]*C
 	}
 	// get all summary datapoints
 	sdp := metric.SummaryDataPoints()
-	if sdp.Len() > 0 {
-		fmt.Printf("*********SummaryDataPoints has %d\n", sdp.Len())
-	}
 	for m := 0; m < sdp.Len(); m++ {
 		dp := sdp.At(m)
 		if dp.IsNil() {
@@ -191,7 +186,7 @@ func buildCWMetricFromDDP(metric pdata.DoubleDataPoint, mDesc pdata.MetricDescri
 		fieldsPairs[k] = v.Value()
 		dimensionSlice = append(dimensionSlice, k)
 	})
-	// add OT lib as an additional dimension
+	// add OTLib as an additional dimension
 	fieldsPairs[OtlibDimensionKey] = OTLib
 	dimensionSlice = append(dimensionSlice, OtlibDimensionKey)
 
@@ -202,7 +197,6 @@ func buildCWMetricFromDDP(metric pdata.DoubleDataPoint, mDesc pdata.MetricDescri
 		return nil
 	}
 	fieldsPairs[mDesc.Name()] = metricVal
-	fmt.Println(fmt.Sprintf("%s%v", "MetricValSent=================", metricVal))
 
 	// EMF dimension attr takes list of list on dimensions TODO: add single/zero dimension rollup here
 	var dimensionArray [][]string
@@ -235,7 +229,7 @@ func buildCWMetricFromIDP(metric pdata.Int64DataPoint, mDesc pdata.MetricDescrip
 		fieldsPairs[k] = v.Value()
 		dimensionSlice = append(dimensionSlice, k)
 	})
-	// add OT lib as an additional dimension
+	// add OTLib as an additional dimension
 	fieldsPairs[OtlibDimensionKey] = OTLib
 	dimensionArray = append(dimensionArray, append(dimensionSlice, OtlibDimensionKey))
 
@@ -246,17 +240,17 @@ func buildCWMetricFromIDP(metric pdata.Int64DataPoint, mDesc pdata.MetricDescrip
 		return nil
 	}
 	fieldsPairs[mDesc.Name()] = metricVal
-	fmt.Println(fmt.Sprintf("%s%v", "MetricValSent=================", metricVal))
 
 	// EMF dimension attr takes list of list on dimensions. Including single/zero dimension rollup
 	//"Zero" dimension rollup
 	dimensionZero := []string{OtlibDimensionKey}
-	dimensionArray = append(dimensionArray, dimensionZero)
+	if len(dimensionSlice) > 0 {
+		dimensionArray = append(dimensionArray, dimensionZero)
+	}
 	//"One" dimension rollup
 	for _, dimensionKey := range dimensionSlice {
 		dimensionArray = append(dimensionArray, append(dimensionZero, dimensionKey))
 	}
-	fmt.Printf("Aggregated dimensions array is: %v\n", dimensionArray)
 
 	cwMeasurement := &CwMeasurement{
 		Namespace:  namespace,
@@ -284,7 +278,7 @@ func buildCWMetricFromSDP(metric pdata.SummaryDataPoint, mDesc pdata.MetricDescr
 		fieldsPairs[k] = v.Value()
 		dimensionSlice = append(dimensionSlice, k)
 	})
-	// add OT lib as an additional dimension
+	// add OTLib as an additional dimension
 	fieldsPairs[OtlibDimensionKey] = OTLib
 	dimensionSlice = append(dimensionSlice, OtlibDimensionKey)
 
@@ -365,5 +359,8 @@ func calculateRate(fields map[string]interface{}, val interface{}, timestamp int
 		timestamp: timestamp,
 	}
 	currentState.Set(hashStr, content)
+	if metricRate == nil {
+		metricRate = 0
+	}
 	return metricRate
 }

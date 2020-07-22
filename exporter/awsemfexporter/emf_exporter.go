@@ -90,7 +90,7 @@ func (emf *emfExporter) pushMetricsData(_ context.Context, md pdata.Metrics) (dr
 	if len(expConfig.LogStreamName) > 0 {
 		logStream = expConfig.LogStreamName
 	}
-	pusher := emf.getPusher(logGroup, logStream, nil, NonBlocking)
+	pusher := emf.getPusher(logGroup, logStream, nil)
 	if pusher != nil {
 		for _, ple := range putLogEvents {
 			pusher.AddLogEntry(ple)
@@ -99,7 +99,7 @@ func (emf *emfExporter) pushMetricsData(_ context.Context, md pdata.Metrics) (dr
 	return 0, nil
 }
 
-func (emf *emfExporter) getPusher(logGroup, logStream string, stateFolder *string, mode string) Pusher {
+func (emf *emfExporter) getPusher(logGroup, logStream string, stateFolder *string) Pusher {
 	emf.pusherMapLock.Lock()
 	defer emf.pusherMapLock.Unlock()
 
@@ -114,11 +114,8 @@ func (emf *emfExporter) getPusher(logGroup, logStream string, stateFolder *strin
 	if pusher, ok = streamToPusherMap[logStream]; !ok {
 		pusher = NewPusher(
 			aws.String(logGroup), aws.String(logStream), stateFolder,
-			emf.ForceFlushInterval, emf.retryCnt, emf.svcStructuredLog, emf.shutdownChan, &emf.pusherWG, mode)
+			emf.ForceFlushInterval, emf.retryCnt, emf.svcStructuredLog, emf.shutdownChan, &emf.pusherWG)
 		streamToPusherMap[logStream] = pusher
-	} else if pusher.GetMode() != mode {
-		emf.logger.Error(fmt.Sprintf("E! LogStream conflict between metric_collected and logs_collected, for logGroup %s, logStream %s and mode %s \n", logGroup, logStream, mode))
-		return nil
 	}
 
 	return pusher
@@ -133,6 +130,8 @@ func (emf *emfExporter) ConsumeMetrics(ctx context.Context, md pdata.Metrics) er
 
 // Shutdown stops the exporter and is invoked during shutdown.
 func (emf *emfExporter) Shutdown(ctx context.Context) error {
+	close(emf.shutdownChan)
+	emf.pusherWG.Wait()
 	return nil
 }
 
@@ -157,7 +156,9 @@ func generateLogEventFromMetric(metric pdata.Metrics) ([]*LogEvent, string) {
 		if err != nil || cwm == nil {
 			return nil, ""
 		}
-		namespace = cwm[0].Measurements[0].Namespace
+		if len(cwm) > 0 && len(cwm[0].Measurements) > 0 {
+			namespace = cwm[0].Measurements[0].Namespace
+		}
 		// append all datapoint metrics in the request into CWMetric list
 		for _, v := range cwm {
 			cwMetricLists = append(cwMetricLists, v)
