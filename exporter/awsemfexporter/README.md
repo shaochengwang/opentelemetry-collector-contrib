@@ -6,7 +6,7 @@ and then sends them directly to CloudWatch Logs using the
 [PutLogEvents](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutLogEvents.html) API.
 
 ## Data Conversion
-Convert OpenTelemetry ```Counter``` metrics datapoints into CloudWatch ```EMF``` structured log formats and send it to CloudWatch. Logs and Metrics will be displayed in CloudWatch console.
+Convert OpenTelemetry ```Int64DataPoints```, ```DoubleDataPoints```, ```SummaryDataPoints``` metrics datapoints into CloudWatch ```EMF``` structured log formats and send it to CloudWatch. Logs and Metrics will be displayed in CloudWatch console.
 
 ## Exporter Configuration
 
@@ -17,6 +17,7 @@ comparable AWS X-Ray Daemon configuration values.
 | :---------------- | :--------------------------------------------------------------------- | ------- |
 | `log_group_name`  | Customized log group name                                              |         |
 | `log_stream_name` | Customized log stream name                                             |         |
+| `namespace`       | Customized CloudWatch metrics namespace                                |         |
 | `endpoint`        | Optionally override the default CloudWatch service endpoint.           |         |
 | `no_verify_ssl`   | Enable or disable TLS certificate verification.                        | false   |
 | `proxy_address`   | Upload Structured Logs to AWS CloudWatch through a proxy.              |         |
@@ -24,6 +25,9 @@ comparable AWS X-Ray Daemon configuration values.
 | `local_mode`      | Local mode to skip EC2 instance metadata check.                        | false   |
 | `resource_arn`    | Amazon Resource Name (ARN) of the AWS resource running the collector.  |         |
 | `role_arn`        | IAM role to upload segments to a different account.                    |         |
+| `max_retries`     | Maximum number of retries before abandoning an attempt to post data.   |    5    |
+| `force_flush_interval`| Specifies in seconds the maximum amount of time that metrics remain in the memory buffer before being sent to the server.|    60   |
+
 
 ## AWS Credential Configuration
 
