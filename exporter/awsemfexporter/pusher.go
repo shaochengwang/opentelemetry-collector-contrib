@@ -2,7 +2,10 @@ package awsemfexporter
 
 import (
 	"github.com/open-telemetry/opentelemetry-collector-contrib/exporter/awsemfexporter/publisher"
+	"io"
 	"log"
+	"os"
+	"regexp"
 	"sort"
 	"sync"
 	"time"
@@ -28,6 +31,38 @@ const (
 
 	Structured    = "Structured"
 )
+
+
+var prefixRegex = regexp.MustCompile("^[DIWE]!")
+
+func newPusherWriter(w io.Writer) io.Writer {
+	return &pusherLog{
+		writer: w,
+	}
+}
+
+type pusherLog struct {
+	writer io.Writer
+}
+
+func (pl *pusherLog) Write(b []byte) (n int, err error) {
+	var line []byte
+	if !prefixRegex.Match(b) {
+		line = append([]byte(time.Now().UTC().Format(time.RFC3339)+" I! "), b...)
+	} else {
+		line = append([]byte(time.Now().UTC().Format(time.RFC3339)+" "), b...)
+	}
+	return pl.writer.Write(line)
+}
+
+func setupLogging() {
+	log.SetFlags(0)
+
+	var writer io.WriteCloser
+	writer = os.Stderr
+
+	log.SetOutput(newPusherWriter(writer))
+}
 
 //Struct to present a log event.
 type LogEvent struct {
@@ -170,6 +205,7 @@ func NewPusher(logGroupName, logStreamName, fileStateFolder *string,
 	pusher := newPusher(logGroupName, logStreamName, fileStateFolder,
 		forceFlushInterval,
 		svcStructuredLog, shutdownChan, wg)
+	setupLogging()
 
 	// For blocking queue, assuming the log batch payload size is 1MB. Set queue size to 2
 	// For nonblocking queue, assuming the log batch payload size is much less than 1MB. Set queue size to 20
