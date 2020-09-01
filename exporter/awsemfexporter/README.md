@@ -17,6 +17,7 @@ comparable AWS X-Ray Daemon configuration values.
 | :---------------- | :--------------------------------------------------------------------- | ------- |
 | `log_group_name`  | Customized log group name                                              |         |
 | `log_stream_name` | Customized log stream name                                             |         |
+| `rollup_option`   | Metrics dimension roll up options. Eg, 0-All, 1=Single, 2=NoRollup     |    0    |
 | `namespace`       | Customized CloudWatch metrics namespace                                |         |
 | `endpoint`        | Optionally override the default CloudWatch service endpoint.           |         |
 | `no_verify_ssl`   | Enable or disable TLS certificate verification.                        | false   |
