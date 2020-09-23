@@ -157,7 +157,7 @@ func TestTranslateOtToCWMetric(t *testing.T) {
 	rm := rms.At(0)
 	assert.NotNil(t, rm)
 
-	cwm, totalDroppedMetrics := TranslateOtToCWMetric(&rm)
+	cwm, totalDroppedMetrics := TranslateOtToCWMetric(&rm, 0)
 	assert.Equal(t, 0, totalDroppedMetrics)
 	assert.NotNil(t, cwm)
 	assert.Equal(t, 3, len(cwm))

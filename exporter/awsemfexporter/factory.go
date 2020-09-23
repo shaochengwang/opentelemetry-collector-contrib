@@ -47,13 +47,14 @@ func (f *Factory) CreateDefaultConfig() configmodels.Exporter {
 		LogStreamName:         "",
 		Endpoint:              "",
 		RequestTimeoutSeconds: 30,
-		MaxRetries:            5,
+		MaxRetries:            1,
 		NoVerifySSL:           false,
 		ProxyAddress:          "",
 		Region:                "",
 		LocalMode:             false,
 		ResourceARN:           "",
 		RoleARN:               "",
+		DimensionRollupOption: 0,
 	}
 }
 

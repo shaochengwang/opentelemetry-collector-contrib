@@ -74,10 +74,11 @@ func New(
 
 func (emf *emfExporter) pushMetricsData(_ context.Context, md pdata.Metrics) (droppedTimeSeries int, err error) {
 	expConfig := emf.config.(*Config)
+	dimensionRollupOption := expConfig.DimensionRollupOption
 	logGroup := "/metrics/default"
 	logStream := "otel-stream"
 	// override log group if customer has specified Resource Attributes service.name or service.namespace
-	putLogEvents, totalDroppedMetrics, namespace := generateLogEventFromMetric(md)
+	putLogEvents, totalDroppedMetrics, namespace := generateLogEventFromMetric(md, dimensionRollupOption)
 	if namespace != "" {
 		logGroup = fmt.Sprintf("/metrics/%s", namespace)
 	}
@@ -147,7 +148,7 @@ func (emf *emfExporter) Start(ctx context.Context, host component.Host) error {
 	return nil
 }
 
-func generateLogEventFromMetric(metric pdata.Metrics) ([]*LogEvent, int, string) {
+func generateLogEventFromMetric(metric pdata.Metrics, dimensionRollupOption int) ([]*LogEvent, int, string) {
 	imd := pdatautil.MetricsToInternalMetrics(metric)
 	rms := imd.ResourceMetrics()
 	cwMetricLists := []*CWMetrics{}
@@ -160,7 +161,7 @@ func generateLogEventFromMetric(metric pdata.Metrics) ([]*LogEvent, int, string)
 			continue
 		}
 		// translate OT metric datapoints into CWMetricLists
-		cwm, totalDroppedMetrics = TranslateOtToCWMetric(&rm)
+		cwm, totalDroppedMetrics = TranslateOtToCWMetric(&rm, dimensionRollupOption)
 		if cwm == nil {
 			return nil, totalDroppedMetrics, ""
 		}
