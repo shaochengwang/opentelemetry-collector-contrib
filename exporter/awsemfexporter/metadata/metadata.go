@@ -14,10 +14,6 @@ const (
 	defaultCGroupPath = "/proc/self/cgroup"
 )
 
-type MetadataHelper interface {
-	GetHostIdentifier() (string, error)
-}
-
 type Metadata struct{
 	ec2 *ec2metadata.EC2Metadata
 	docker *DockerHelper
